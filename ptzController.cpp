@@ -17,19 +17,16 @@ using namespace std;
 
 // Initialize the com port to portname
 // the default portname is "COM3"
-PTZController::PTZController( char *url, char *portname="COM3", char *windowname="PTZ Camera", int ptznumber=1 ) {
+PTZController::PTZController( char *portname="COM3", char *windowname="PTZ Camera", int ptznumber=1 ) {
 	this->_sp = new Serial(portname);
 	this->_ptzNumber = ptznumber;
 	this->_power = false;
-	this->_url = url;
 	this->_windowName = windowname;
-	this->_videoPlayer = new vlcVideo( _windowName, _url, 1920, 1080 );
 
 	if( !this->_sp->IsConnected() ) {
 		cerr << "Can not connect to PTZ motion controller!" << endl;
 	}
 
-	this->_videoPlayer->videoInit();
 }
 
 // Destructor close the com port
