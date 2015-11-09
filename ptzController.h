@@ -9,19 +9,32 @@
 #define _PTZ_CONTROLLER_H_
 
 #include "SerialClass.h"
+#include "vlcVideo.h"
 
 class PTZController {
 
 private:
-	// serial port connector 
-	Serial* _sp;
+	Serial *_sp;			// serial port connector 
+	int _ptzNumber;			// the number of PTZ camera
+	bool _power;			// the power status
+	char *_windowName;		// the Opencv window name
+	char *_url;				// the video position
+	vlcVideo *_videoPlayer;	// the video player
 	
 public:
-	// PTZ constructor & destructor
-	PTZController( char *portname );
+	// PTZ CONSTRUCTOR & DESTRUCTOR
+	PTZController( char *url, char *portname, char *windowname, int ptznumber );
 	~PTZController();
 
-	// 
+	// PTZ POWER CONTROLLER
+	bool isOn();
+	void turnOn();
+	void turnOff();
+
+	// PTZ MOTION CONTROLLER
+	void moveTo( double alpha, double beta );
+
+	// PTZ VIDEO CONTROLLER
 };
 
 #endif

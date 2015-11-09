@@ -8,10 +8,11 @@
 #include <iostream>
 #include <windows.h>
 #include <opencv2/opencv.hpp>
-#include <opencv2\highgui\highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include <string>
 #include "DirectX.h"
 #include "SerialClass.h"
+#include "ptzController.h"
 
 using namespace std;
 using namespace cv;
@@ -22,28 +23,30 @@ int main( int argc, char *argv[] )
 	//
 	// Initialization parameters
 	//
-	string ptzUrl = "rtsp://192.168.50.41:8557/h264";		// the location of the ptz stream
-	string ptzWindow = "Tracking Camera";					// the window name of ptz
-	string pnrmWindow = "Panorama Camera";					// the window name of panorama
-	int pnrmResolutionIndex = 7;							// the default panorama's resolution is set to 7 (2048*1536)
+	char *ptzUrl = "rtsp://192.168.50.41:8557/h264";		// the location of the ptz stream
+	char *ptzWindow = "Tracking Camera";					// the window name of ptz
+	char *pnrmWindow = "Panorama Camera";					// the window name of panorama
+	int pnrmResolutionIndex = 6;							// the default panorama's resolution is set to 7 (2048*1536)
 
 	//
 	// Initialization
 	//
 
+	PTZController ptz( "COM3", ptzWindow, 1 );
+	
 	// Open the ptz camera
-	VideoCapture ptzCapture(ptzUrl);
-	namedWindow( ptzWindow );
+	VideoCapture ptzCapture("test.avi");
+	namedWindow( ptzWindow, WINDOW_AUTOSIZE );
+	moveWindow( ptzWindow, 100, 100 );
 	if( !ptzCapture.isOpened() ) {
 		cerr << "PTZ camera is not connected!" << endl;
 		return -1;
 	}
 
-	/*
 	// Open the panorama camera
-	namedWindow( pnrmWindow, CV_WINDOW_NORMAL|CV_GUI_NORMAL );
-	wstring tmpwstr = wstring( pnrmWindow.begin(), pnrmWindow.end() );
-	HWND pnrmHandle = ::FindWindow( 0, tmpwstr.c_str() );
+	namedWindow( pnrmWindow, WINDOW_AUTOSIZE );
+	moveWindow( pnrmWindow, 100, 420 );
+	HWND pnrmHandle = (HWND) cvGetWindowHandle( pnrmWindow );
 	if( pnrmHandle == NULL ) {
 		cerr << "Can't get panorama window handle." << endl;
 		return -1;
@@ -74,27 +77,24 @@ int main( int argc, char *argv[] )
 		cerr << "The preview video can't start!" << endl;
 		return -1;
 	}
-	*/
 
 	//
 	// Processing
 	//
-	Mat ptzFrame;
+	Mat ptzFrame, tmp;
 
 	while( true ) {
 		if( !ptzCapture.read(ptzFrame) ) break;
-		imshow( ptzWindow, ptzFrame );
+		resize( ptzFrame, tmp, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
+		imshow( ptzWindow, tmp );
 		waitKey(30);
 	}
 
-	// Release Resources
 
-	/*
+	// Release Resources
 	hr = StopPreviewVideo();
 	hr = UninitializeDirectX();
 	hr = ReleaseDirectXObject();
-	*/
-
 	
 	return 0;
 }
