@@ -46,7 +46,10 @@ int main( int argc, char *argv[] )
 	// Initialization
 	//
 
-	// VLC PTZ video
+	// Open the vlc PTZ camera 
+
+	namedWindow( ptzWindow, WINDOW_AUTOSIZE );
+	moveWindow( ptzWindow, 100, 100 );
 
 	// VLC pointers
 	libvlc_instance_t *vlcInstance;
@@ -75,23 +78,15 @@ int main( int argc, char *argv[] )
 	context->mutex = CreateMutex(NULL, FALSE, NULL);
 	context->image = new Mat(ptzHeight, ptzWidth, CV_8UC3);
 	context->pixels = (unsigned char *)context->image->data;   
-	// show blank image
-	// imshow("test", *context->image);
 
 	libvlc_video_set_callbacks(mp, lock, unlock, display, context);
 	libvlc_video_set_format(mp, "RV24", ptzWidth, ptzHeight, ptzWidth * 24 / 8); // pitch = width * BitsPerPixel / 8
 
 	libvlc_media_player_play(mp);
-	
-	// Open the ptz camera
-	VideoCapture ptzCapture("test.avi");
-	namedWindow( ptzWindow, WINDOW_AUTOSIZE );
-	moveWindow( ptzWindow, 100, 100 );
-	if( !ptzCapture.isOpened() ) {
-		cerr << "PTZ camera is not connected!" << endl;
-		return -1;
-	}
 
+	// Setup the connection to controller PTZ
+	PTZController ptzMotion( "COM3", ptzWindow, 1 );
+	
 	// Open the panorama camera
 	namedWindow( pnrmWindow, WINDOW_AUTOSIZE );
 	moveWindow( pnrmWindow, 100, 420 );
@@ -130,12 +125,14 @@ int main( int argc, char *argv[] )
 	//
 	// Processing
 	//
-	Mat ptzFrame, tmp;
+	Mat ptzFrame, pnrmFrame;
 
 	while( true ) {
 		// if( !ptzCapture.read(ptzFrame) ) break;
 		// resize( ptzFrame, tmp, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
-		// imshow( ptzWindow, tmp );
+		ptzFrame = Mat(*context->image);
+		resize( ptzFrame, ptzFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
+		imshow( ptzWindow, ptzFrame );
 		waitKey(30);
 	}
 
@@ -174,9 +171,9 @@ void unlock(void *data, void *id, void *const *p_pixels){
 
 	/* VLC just rendered the video, but we can also render stuff */
 	// show rendered image
-	Mat tmp(*ctx->image);
-	resize( tmp, tmp, Size(tmp.cols/4, tmp.rows/4) );
-	imshow( "Tracking Camera", tmp );
+	// Mat tmp(*ctx->image);
+	// resize( tmp, tmp, Size(tmp.cols/4, tmp.rows/4) );
+	// imshow( "Tracking Camera", tmp );
 
 	ReleaseMutex(ctx->mutex);
 }

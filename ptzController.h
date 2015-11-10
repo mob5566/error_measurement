@@ -17,6 +17,9 @@ private:
 	int _ptzNumber;			// the number of PTZ camera
 	bool _power;			// the power status
 	char *_windowName;		// the Opencv window name
+
+	static const double panStepPerDeg;
+	static const double tiltStepPerDeg;
 	
 public:
 	// PTZ CONSTRUCTOR & DESTRUCTOR
