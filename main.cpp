@@ -15,6 +15,8 @@
 #include "ptzController.h"
 #include <vlc/vlc.h>
 
+#define PI acos(-1.0)
+
 using namespace std;
 using namespace cv;
 
@@ -38,9 +40,11 @@ int main( int argc, char *argv[] )
 	char *ptzUrl = "rtsp://192.168.50.41:8557/h264";		// the location of the ptz stream
 	char *ptzWindow = "Tracking Camera";					// the window name of ptz
 	char *pnrmWindow = "Panorama Camera";					// the window name of panorama
-	int pnrmResolutionIndex = 6;							// the default panorama's resolution is set to 7 (2048*1536)
+	int pnrmResolutionIndex = 0;							// the default panorama's resolution is set to 7 (2048*1536)
 	int ptzWidth = 1920;									// the width of ptz video
 	int ptzHeight = 1080;									// the height of ptz video
+	int pnrmWidth = 1024;
+	int pnrmHeight = 768;
 
 	//
 	// Initialization
@@ -90,34 +94,29 @@ int main( int argc, char *argv[] )
 	// Open the panorama camera
 	namedWindow( pnrmWindow, WINDOW_AUTOSIZE );
 	moveWindow( pnrmWindow, 100, 420 );
+
 	HWND pnrmHandle = (HWND) cvGetWindowHandle( pnrmWindow );
 	if( pnrmHandle == NULL ) {
 		cerr << "Can't get panorama window handle." << endl;
 		return -1;
 	}
 
-	HRESULT hr;
-
-	hr = InitializeDirectX();
-	if( hr != S_OK ) {
+	if( InitializeDirectX() != S_OK ) {
 		cerr << "Please update Direct X. Version 9.0 or higher recommended." << endl;
 		return -1;
 	}
 
-	hr = GetDirectXObject();
-	if( hr != S_OK ) {
+	if( GetDirectXObject() != S_OK ) {
 		cerr << "Get DirectX object failed." << endl;
 		return -1;
 	}
 
-	hr = InitializePreviewVideo_SetStreamFormat( pnrmResolutionIndex, pnrmHandle );
-	if( hr != S_OK ) {
+	if( InitializePreviewVideo_SetStreamFormat( pnrmResolutionIndex, pnrmHandle ) != S_OK ) {
 		cerr << "Initialization of preview video failed." << endl;
 		return -1;
 	}
 
-	hr = StartPreviewVideo();
-	if( hr != S_OK ) {
+	if( StartPreviewVideo() != S_OK ) {
 		cerr << "The preview video can't start!" << endl;
 		return -1;
 	}
@@ -126,11 +125,53 @@ int main( int argc, char *argv[] )
 	// Processing
 	//
 	Mat ptzFrame, pnrmFrame;
+	Mat tmpFrame, planes[3];
+	unsigned char *imgBuffer;
+	imgBuffer = (unsigned char *) malloc( pnrmWidth*pnrmHeight*3*sizeof(unsigned char) );
+
+	namedWindow( "Track Circle" );
+	moveWindow( "Track Circle", 700, 100 );
 
 	while( true ) {
-		// if( !ptzCapture.read(ptzFrame) ) break;
-		// resize( ptzFrame, tmp, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
+
+		// get ptz frame
 		ptzFrame = Mat(*context->image);
+
+		// get panorama frame
+		if( CaptureStillImageToFile(imgBuffer)!=S_OK ) {
+			cerr << "Can't get panorama frame!" << endl;
+			return -1;
+		}
+		pnrmFrame = Mat( Size(pnrmWidth,pnrmHeight), CV_8UC3, imgBuffer );
+
+		cvtColor( pnrmFrame, tmpFrame, CV_BGR2GRAY );
+
+		GaussianBlur( tmpFrame, tmpFrame, Size(9,9), 2, 2 );
+		vector<Vec3f> circles;
+		HoughCircles( tmpFrame, circles, CV_HOUGH_GRADIENT, 2, tmpFrame.rows, 200, 100 );
+
+		for( size_t i=0; i<circles.size(); ++i ) {
+
+			// assume that we will get only one circle
+			Point center( cvRound(circles[i][0]), cvRound(circles[i][1]) );
+			int radius = cvRound(circles[i][2]);
+
+			double dx = center.x-(pnrmWidth/2);
+			double dy = center.y-(pnrmHeight/2)+300;
+
+			dx = dx*(4.48/pnrmWidth);
+			dy = dy*(3.36/pnrmHeight);
+
+			double alpha = atan(dx/3.74)*(180.0/PI);
+			double beta = atan(dy/3.74)*(180.0/PI);
+
+			ptzMotion.moveTo( -alpha, -beta );
+
+			circle( pnrmFrame, center, 3, Scalar(0,255,0), -1, 8, 0 );
+		}
+
+		imshow( "Track Circle", pnrmFrame );
+
 		resize( ptzFrame, ptzFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
 		imshow( ptzWindow, ptzFrame );
 		waitKey(30);
@@ -138,9 +179,9 @@ int main( int argc, char *argv[] )
 
 
 	// Release Resources
-	hr = StopPreviewVideo();
-	hr = UninitializeDirectX();
-	hr = ReleaseDirectXObject();
+	StopPreviewVideo();
+	UninitializeDirectX();
+	ReleaseDirectXObject();
 
 	libvlc_media_player_stop(mp);
 	
@@ -171,10 +212,10 @@ void unlock(void *data, void *id, void *const *p_pixels){
 
 	/* VLC just rendered the video, but we can also render stuff */
 	// show rendered image
-	// Mat tmp(*ctx->image);
-	// resize( tmp, tmp, Size(tmp.cols/4, tmp.rows/4) );
-	// imshow( "Tracking Camera", tmp );
+
+	// Mat tmpFrame(*ctx->image);
+	// resize( tmpFrame, tmpFrame, Size(tmpFrame.cols/4, tmpFrame.rows/4) );
+	// imshow( "Tracking Camera", tmpFrame );
 
 	ReleaseMutex(ctx->mutex);
 }
-
