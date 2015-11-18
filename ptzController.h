@@ -33,6 +33,7 @@ public:
 
 	// PTZ MOTION CONTROLLER
 	void moveTo( double alpha, double beta );
+	void move( double alpha, double beta );
 
 	// PTZ VIDEO CONTROLLER
 };

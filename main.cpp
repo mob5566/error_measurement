@@ -6,6 +6,7 @@
  */
 
 #include <iostream>
+#include <fstream>
 #include <windows.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -16,6 +17,7 @@
 #include <vlc/vlc.h>
 
 #define PI acos(-1.0)
+#define sqr(x) ((x)*(x))
 
 using namespace std;
 using namespace cv;
@@ -43,8 +45,23 @@ int main( int argc, char *argv[] )
 	int pnrmResolutionIndex = 0;							// the default panorama's resolution is set to 7 (2048*1536)
 	int ptzWidth = 1920;									// the width of ptz video
 	int ptzHeight = 1080;									// the height of ptz video
-	int pnrmWidth = 1024;
-	int pnrmHeight = 768;
+	int pnrmWidth = 1024;									// the width of panorama video
+	int pnrmHeight = 768;									// the height of panorama video
+	string outputDataName = "dism";							// the location of the output data file
+	double pnrmFL = 3.74;									// the focal length of panorama camera
+	double ptzFL = 5.0;									// the focal length of panorama camera
+	double pnrmSensorWidth = 4.48;							// the width of panorama sensor in millimeters
+	double pnrmSensorHeight = 3.36;							// the height of panorama sensor in millimeters
+	double ptzSensorWidth = 5.12;							// the width of ptz sensor in millimeters
+	double ptzSensorHeight = 2.88;							// the height of ptz sensor in millimeters
+
+	// parameters for calibration
+	double circleRadius = 154.0/2;							// the real radius of circle in millimeters
+	double pnrmDis;											// the distance between panorama camera and circle center
+	double ptzDis;											// the distance between ptz camera and circle center
+	double baseline = 190.0;								// the distance between ptz camera and panorama camera
+	double theta;											// the angle between ptz camera and panorama camera
+
 
 	//
 	// Initialization
@@ -125,26 +142,39 @@ int main( int argc, char *argv[] )
 	// Processing
 	//
 	Mat ptzFrame, pnrmFrame;
-	Mat tmpFrame, planes[3];
+	Mat tmpFrame;
 	unsigned char *imgBuffer;
 	imgBuffer = (unsigned char *) malloc( pnrmWidth*pnrmHeight*3*sizeof(unsigned char) );
+	Point2d trackCenter = Point();
+	Point pnrmCenter, ptzCenter;
+	int radius;
+	double dx, dy, alpha, beta;
+	char buf[1024];
 
 	namedWindow( "Track Circle" );
 	moveWindow( "Track Circle", 700, 100 );
 
+	int frameCnt = 0;
+	ofstream fout( "data/"+outputDataName+".txt" );
+
+	waitKey( 2000 );
+
 	while( true ) {
 
 		// get ptz frame
-		ptzFrame = Mat(*context->image);
+		ptzFrame = Mat(*context->image).clone();
 
 		// get panorama frame
 		if( CaptureStillImageToFile(imgBuffer)!=S_OK ) {
 			cerr << "Can't get panorama frame!" << endl;
 			return -1;
 		}
-		pnrmFrame = Mat( Size(pnrmWidth,pnrmHeight), CV_8UC3, imgBuffer );
+		pnrmFrame = Mat( Size(pnrmWidth,pnrmHeight), CV_8UC3, imgBuffer ).clone();
 
+		flip( pnrmFrame, pnrmFrame, 1 );
+		// using HoughCircle to find the circle at panorama video
 		cvtColor( pnrmFrame, tmpFrame, CV_BGR2GRAY );
+		threshold( tmpFrame, tmpFrame, 50, 255, THRESH_BINARY_INV );
 
 		GaussianBlur( tmpFrame, tmpFrame, Size(9,9), 2, 2 );
 		vector<Vec3f> circles;
@@ -153,30 +183,124 @@ int main( int argc, char *argv[] )
 		for( size_t i=0; i<circles.size(); ++i ) {
 
 			// assume that we will get only one circle
-			Point center( cvRound(circles[i][0]), cvRound(circles[i][1]) );
-			int radius = cvRound(circles[i][2]);
+			pnrmCenter = Point( cvRound(circles[0][0]), cvRound(circles[0][1]) );
+			radius = cvRound(circles[0][2]);
 
-			double dx = center.x-(pnrmWidth/2);
-			double dy = center.y-(pnrmHeight/2)+300;
+			dx = pnrmCenter.x-(pnrmWidth/2);
+			dy = -pnrmCenter.y+(pnrmHeight/2);
+	
+			dx = dx*(pnrmSensorWidth/pnrmWidth);
+			dy = dy*(pnrmSensorHeight/pnrmHeight);
+	
+			alpha = atan(dx/pnrmFL)*(180.0/PI);
+			beta = atan(dy/pnrmFL)*(180.0/PI);
+			pnrmDis = circleRadius*pnrmFL/(radius*(pnrmSensorHeight/pnrmHeight));
+			
+			if( frameCnt%20 == 0 ) {
+				fout << "The " << frameCnt/20 << " round" << endl;
 
-			dx = dx*(4.48/pnrmWidth);
-			dy = dy*(3.36/pnrmHeight);
+				fout << "Panorama:" << endl;
+				fout << "\tcenter (" << pnrmCenter.x << ", " << pnrmCenter.y << ")" << endl;
+				fout << "\tradius in pixels " << radius << endl;
+				fout << "\tdiff in degrees (" << alpha << ", " << beta << ")" << endl;
+				// theta = beta;
+				
+				// pnrmDis = circleRadius*pnrmFL/(radius*(pnrmSensorHeight/pnrmHeight));
+				fout << "\tdistance to center " << pnrmDis << endl;
+			}
 
-			double alpha = atan(dx/3.74)*(180.0/PI);
-			double beta = atan(dy/3.74)*(180.0/PI);
+			theta = 90.0-beta;
+			
+			ptzDis = sqrt( sqr(pnrmDis)+sqr(baseline)-2*pnrmDis*baseline*cos(theta/180*PI) );
+			theta = acos( (sqr(ptzDis)+sqr(baseline)-sqr(pnrmDis))/(2*ptzDis*baseline) )*180/PI;
 
-			ptzMotion.moveTo( -alpha, -beta );
+			beta = theta-90.0;
 
-			circle( pnrmFrame, center, 3, Scalar(0,255,0), -1, 8, 0 );
+			if( frameCnt%20 == 0 ) {
+				fout << "\tptz Distance is " << ptzDis << endl;
+				fout << "\tbeta offset " << beta << endl;
+			}
+
+			if( abs(alpha-trackCenter.x)>1.0 || abs(beta-trackCenter.y)>1.0 )
+					trackCenter = Point2d(alpha,beta);
+			ptzMotion.moveTo( trackCenter.x, trackCenter.y );
+
+			circle( pnrmFrame, pnrmCenter, 3, Scalar(0,255,0), -1, 8, 0 );
+			circle( pnrmFrame, Point(pnrmWidth/2,pnrmHeight/2), 3, Scalar(0,0,255), -1, 8, 0 );
+
+			if( frameCnt%20 == 0 ) {
+				sprintf( buf, "pnrm.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
+				imwrite( "imgs/"+string(buf), pnrmFrame );
+			}
 		}
 
 		imshow( "Track Circle", pnrmFrame );
 
-		resize( ptzFrame, ptzFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
-		imshow( ptzWindow, ptzFrame );
-		waitKey(30);
+		if( frameCnt%20 == 0 ) {
+			// using HoughCircle to find the circle at ptz video
+			cvtColor( ptzFrame, tmpFrame, CV_BGR2GRAY );
+			threshold( tmpFrame, tmpFrame, 50, 255, THRESH_BINARY_INV );
+	
+			GaussianBlur( tmpFrame, tmpFrame, Size(9,9), 2, 2 );
+			circles.clear();
+			HoughCircles( tmpFrame, circles, CV_HOUGH_GRADIENT, 2, tmpFrame.rows, 200, 100 );
+
+			for( int i=0; i < circles.size(); ++i ) {
+				ptzCenter = Point( cvRound(circles[0][0]), cvRound(circles[0][1]) );
+				radius = cvRound(circles[0][2]);
+		
+				dx = ptzCenter.x-(ptzWidth/2);
+				dy = -ptzCenter.y+(ptzHeight/2);
+
+				fout << "PTZ:" << endl;
+				fout << "\tcenter (" << ptzCenter.x << ", " << ptzCenter.y << ")" << endl;
+				fout << "\tdiff in pixels (" << dx << ", " << dy << ")" << endl;
+
+				dx = dx*(ptzSensorWidth/ptzWidth);
+				dy = dy*(ptzSensorHeight/ptzHeight);
+
+				alpha = atan(dx/ptzFL)*(180.0/PI);
+				beta = atan(dy/ptzFL)*(180.0/PI);
+				// theta -= beta;
+
+				// if( frameCnt == 20 )
+					// ptzMotion.move( alpha, beta );
+
+				fout << "\tdiff in degrees (" << alpha << ", " << beta << ")" << endl;
+				fout << "\tradius in pixels " << radius << endl;
+				ptzDis = ptzFL*circleRadius/(radius*(ptzSensorHeight/ptzHeight));
+				fout << "\tdistance to center " << ptzDis << endl;
+
+				/*
+				fout << "//////////////////////////////////////////////////////////////" << endl;
+
+				fout << "theta = " << theta << endl;
+				baseline = sqrt(pnrmDis*pnrmDis+ptzDis*ptzDis-2*pnrmDis*ptzDis*cos(theta*PI/180));
+				fout << "base line = " << baseline << endl;
+				*/
+		
+				fout << endl << endl;
+
+				circle( ptzFrame, ptzCenter, 3, Scalar(0,255,0), -1, 8, 0 );
+				circle( ptzFrame, Point(ptzWidth/2,ptzHeight/2), 3, Scalar(0,0,255), -1, 8, 0 );
+				sprintf( buf, "ptz.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
+				imwrite( "imgs/"+string(buf), ptzFrame );
+			}
+		}
+
+		resize( ptzFrame, tmpFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
+		imshow( ptzWindow, tmpFrame );
+
+		char key = waitKey(30);
+
+		if( key==27 ) break;
+		cout << "frame cnt :" << frameCnt << endl;
+		++frameCnt;
 	}
 
+	fout.close();
+
+	ptzMotion.moveTo( 0.0, 0.0 );
 
 	// Release Resources
 	StopPreviewVideo();

@@ -90,8 +90,6 @@ void PTZController::moveTo( double alpha=0.0, double beta=0.0 ) {
 		beta = -beta;
 	} else down = false;
 
-	printf( "%.3lf %.3lf\n", panStepPerDeg, tiltStepPerDeg );
-
 	int panStep = (int) (panStepPerDeg*alpha);
 	int tiltStep = (int) (tiltStepPerDeg*beta);
 
@@ -99,6 +97,38 @@ void PTZController::moveTo( double alpha=0.0, double beta=0.0 ) {
 	if( down ) tiltStep = -tiltStep;
 
 	sprintf( buf, "%c%c%c%c", 0x80+_ptzNumber, 0x01, 0x06, 0x02 );		// command code
+	sprintf( buf+4, "%c%c", 0x0c, 0x0c );
+	sprintf( buf+6, "%c%c%c%c", (panStep&0xF000)>>12, (panStep&0xF00)>>8, (panStep&0xF0)>>4, (panStep&0xF) );
+	sprintf( buf+10, "%c%c%c%c", (tiltStep&0xF000)>>12, (tiltStep&0xF00)>>8, (tiltStep&0xF0)>>4, (tiltStep&0xF) );
+	sprintf( buf+14, "%c", 0xFF );
+
+	_sp->WriteData( buf, 15 );
+}
+
+// Move the PTZ camera with horizontal alpha degree, and beta degree
+// relative to the current position
+void PTZController::move( double alpha=0.0, double beta=0.0 ) {
+
+	bool left;
+	bool down;
+
+	if( alpha < 0.0 ) {
+		left = true;
+		alpha = -alpha;
+	} else left = false;
+
+	if( beta < 0.0 ) {
+		down = true;
+		beta = -beta;
+	} else down = false;
+
+	int panStep = (int) (panStepPerDeg*alpha);
+	int tiltStep = (int) (tiltStepPerDeg*beta);
+
+	if( left ) panStep = -panStep;
+	if( down ) tiltStep = -tiltStep;
+
+	sprintf( buf, "%c%c%c%c", 0x80+_ptzNumber, 0x01, 0x06, 0x03 );		// command code
 	sprintf( buf+4, "%c%c", 0x0c, 0x0c );
 	sprintf( buf+6, "%c%c%c%c", (panStep&0xF000)>>12, (panStep&0xF00)>>8, (panStep&0xF0)>>4, (panStep&0xF) );
 	sprintf( buf+10, "%c%c%c%c", (tiltStep&0xF000)>>12, (tiltStep&0xF00)>>8, (tiltStep&0xF0)>>4, (tiltStep&0xF) );
