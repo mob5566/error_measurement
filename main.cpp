@@ -26,7 +26,7 @@ struct CTX
 {
    Mat* image;
    HANDLE mutex;
-   uchar*    pixels;
+   uchar* pixels;
 };
 
 void *lock(void *data, void**p_pixels);
@@ -54,12 +54,13 @@ int main( int argc, char *argv[] )
 	double pnrmSensorHeight = 3.36;							// the height of panorama sensor in millimeters
 	double ptzSensorWidth = 5.12;							// the width of ptz sensor in millimeters
 	double ptzSensorHeight = 2.88;							// the height of ptz sensor in millimeters
+	bool errorCorrection = true;							// if errorCorrection is true, the error correction is turn on
 
 	// parameters for calibration
 	double circleRadius = 154.0/2;							// the real radius of circle in millimeters
 	double pnrmDis;											// the distance between panorama camera and circle center
 	double ptzDis;											// the distance between ptz camera and circle center
-	double baseline = 190.0;								// the distance between ptz camera and panorama camera
+	double baseline = 300.0;								// the distance between ptz camera and panorama camera
 	double theta;											// the angle between ptz camera and panorama camera
 
 
@@ -196,8 +197,8 @@ int main( int argc, char *argv[] )
 			beta = atan(dy/pnrmFL)*(180.0/PI);
 			pnrmDis = circleRadius*pnrmFL/(radius*(pnrmSensorHeight/pnrmHeight));
 			
-			if( frameCnt%20 == 0 ) {
-				fout << "The " << frameCnt/20 << " round" << endl;
+			if( frameCnt%10 == 0 ) {
+				fout << "The " << frameCnt/10 << " round" << endl;
 
 				fout << "Panorama:" << endl;
 				fout << "\tcenter (" << pnrmCenter.x << ", " << pnrmCenter.y << ")" << endl;
@@ -205,18 +206,19 @@ int main( int argc, char *argv[] )
 				fout << "\tdiff in degrees (" << alpha << ", " << beta << ")" << endl;
 				// theta = beta;
 				
-				// pnrmDis = circleRadius*pnrmFL/(radius*(pnrmSensorHeight/pnrmHeight));
 				fout << "\tdistance to center " << pnrmDis << endl;
 			}
 
-			theta = 90.0-beta;
+			if( errorCorrection ) {
+				theta = 90.0-beta;
 			
-			ptzDis = sqrt( sqr(pnrmDis)+sqr(baseline)-2*pnrmDis*baseline*cos(theta/180*PI) );
-			theta = acos( (sqr(ptzDis)+sqr(baseline)-sqr(pnrmDis))/(2*ptzDis*baseline) )*180/PI;
+				ptzDis = sqrt( sqr(pnrmDis)+sqr(baseline)-2*pnrmDis*baseline*cos(theta/180*PI) );
+				theta = acos( (sqr(ptzDis)+sqr(baseline)-sqr(pnrmDis))/(2*ptzDis*baseline) )*180/PI;
 
-			beta = theta-90.0;
+				beta = theta-90.0;
+			}
 
-			if( frameCnt%20 == 0 ) {
+			if( frameCnt%10 == 0 ) {
 				fout << "\tptz Distance is " << ptzDis << endl;
 				fout << "\tbeta offset " << beta << endl;
 			}
@@ -229,8 +231,8 @@ int main( int argc, char *argv[] )
 			line( pnrmFrame, Point(pnrmWidth/2-10,pnrmHeight/2), Point(pnrmWidth/2+10,pnrmHeight/2), Scalar(0,0,255), 3, 8, 0);
 			line( pnrmFrame, Point(pnrmWidth/2,pnrmHeight/2-10), Point(pnrmWidth/2,pnrmHeight/2+10), Scalar(0,0,255), 3, 8, 0);
 
-			if( frameCnt%20 == 0 ) {
-				sprintf( buf, "pnrm.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
+			if( frameCnt%10 == 0 ) {
+				sprintf( buf, "pnrm.%s.%d.jpg", outputDataName.c_str(), frameCnt/10 );
 				imwrite( "imgs/"+string(buf), pnrmFrame );
 			}
 		}
@@ -238,7 +240,7 @@ int main( int argc, char *argv[] )
 		resize(pnrmFrame, tmpFrame, Size(pnrmFrame.cols/2,pnrmFrame.rows/2));
 		imshow( "Track Circle", tmpFrame );
 
-		// if( frameCnt%20 == 0 ) {
+		// if( frameCnt%10 == 0 ) {
 			// using HoughCircle to find the circle at ptz video
 			cvtColor( ptzFrame, tmpFrame, CV_BGR2GRAY );
 			threshold( tmpFrame, tmpFrame, 50, 255, THRESH_BINARY_INV );
@@ -254,7 +256,7 @@ int main( int argc, char *argv[] )
 				dx = ptzCenter.x-(ptzWidth/2);
 				dy = -ptzCenter.y+(ptzHeight/2);
 
-				if( frameCnt%20 == 0 ) {
+				if( frameCnt%10 == 0 ) {
 					fout << "PTZ:" << endl;
 					fout << "\tcenter (" << ptzCenter.x << ", " << ptzCenter.y << ")" << endl;
 					fout << "\tdiff in pixels (" << dx << ", " << dy << ")" << endl;
@@ -267,11 +269,11 @@ int main( int argc, char *argv[] )
 				beta = atan(dy/ptzFL)*(180.0/PI);
 				// theta -= beta;
 
-				// if( frameCnt == 20 )
+				// if( frameCnt == 10 )
 					// ptzMotion.move( alpha, beta );
 				ptzDis = ptzFL*circleRadius/(radius*(ptzSensorHeight/ptzHeight));
 
-				if( frameCnt%20 == 0 ) {
+				if( frameCnt%10 == 0 ) {
 					fout << "\tdiff in degrees (" << alpha << ", " << beta << ")" << endl;
 					fout << "\tradius in pixels " << radius << endl;
 					fout << "\tdistance to center " << ptzDis << endl;
@@ -291,8 +293,8 @@ int main( int argc, char *argv[] )
 				line( ptzFrame, Point(ptzWidth/2-10,ptzHeight/2), Point(ptzWidth/2+10,ptzHeight/2), Scalar(0,0,255), 3, 8, 0);
 				line( ptzFrame, Point(ptzWidth/2,ptzHeight/2-10), Point(ptzWidth/2,ptzHeight/2+10), Scalar(0,0,255), 3, 8, 0);
 
-				if( frameCnt%20 == 0 ) {
-					sprintf( buf, "ptz.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
+				if( frameCnt%10 == 0 ) {
+					sprintf( buf, "ptz.%s.%d.jpg", outputDataName.c_str(), frameCnt/10 );
 					imwrite( "imgs/"+string(buf), ptzFrame );
 				}
 			}
