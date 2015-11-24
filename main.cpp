@@ -39,7 +39,7 @@ int main( int argc, char *argv[] )
 	//
 	// Initialization parameters
 	//
-	char *ptzUrl = "rtsp://192.168.50.41:8557/h264";		// the location of the ptz stream
+	char *ptzUrl = "rtsp://192.168.100.150:8557/h264";		// the location of the ptz stream
 	char *ptzWindow = "Tracking Camera";					// the window name of ptz
 	char *pnrmWindow = "Panorama Camera";					// the window name of panorama
 	int pnrmResolutionIndex = 0;							// the default panorama's resolution is set to 7 (2048*1536)
@@ -87,7 +87,7 @@ int main( int argc, char *argv[] )
 	vlcInstance = libvlc_new(sizeof(vlc_args) / sizeof(vlc_args[0]), vlc_args);
 	
 	// Read a distant video stream
-	media = libvlc_media_new_location(vlcInstance, "rtsp://192.168.50.41:8557/h264");
+	media = libvlc_media_new_location(vlcInstance, ptzUrl);
 	// Read a local video file
 	// media = libvlc_media_new_path(vlcInstance, "test.mp4");
 	
@@ -226,7 +226,8 @@ int main( int argc, char *argv[] )
 			ptzMotion.moveTo( trackCenter.x, trackCenter.y );
 
 			circle( pnrmFrame, pnrmCenter, 3, Scalar(0,255,0), -1, 8, 0 );
-			circle( pnrmFrame, Point(pnrmWidth/2,pnrmHeight/2), 3, Scalar(0,0,255), -1, 8, 0 );
+			line( pnrmFrame, Point(pnrmWidth/2-10,pnrmHeight/2), Point(pnrmWidth/2+10,pnrmHeight/2), Scalar(0,0,255), 3, 8, 0);
+			line( pnrmFrame, Point(pnrmWidth/2,pnrmHeight/2-10), Point(pnrmWidth/2,pnrmHeight/2+10), Scalar(0,0,255), 3, 8, 0);
 
 			if( frameCnt%20 == 0 ) {
 				sprintf( buf, "pnrm.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
@@ -234,9 +235,10 @@ int main( int argc, char *argv[] )
 			}
 		}
 
-		imshow( "Track Circle", pnrmFrame );
+		resize(pnrmFrame, tmpFrame, Size(pnrmFrame.cols/2,pnrmFrame.rows/2));
+		imshow( "Track Circle", tmpFrame );
 
-		if( frameCnt%20 == 0 ) {
+		// if( frameCnt%20 == 0 ) {
 			// using HoughCircle to find the circle at ptz video
 			cvtColor( ptzFrame, tmpFrame, CV_BGR2GRAY );
 			threshold( tmpFrame, tmpFrame, 50, 255, THRESH_BINARY_INV );
@@ -245,16 +247,18 @@ int main( int argc, char *argv[] )
 			circles.clear();
 			HoughCircles( tmpFrame, circles, CV_HOUGH_GRADIENT, 2, tmpFrame.rows, 200, 100 );
 
-			for( int i=0; i < circles.size(); ++i ) {
+			for( size_t i=0; i < circles.size(); ++i ) {
 				ptzCenter = Point( cvRound(circles[0][0]), cvRound(circles[0][1]) );
 				radius = cvRound(circles[0][2]);
 		
 				dx = ptzCenter.x-(ptzWidth/2);
 				dy = -ptzCenter.y+(ptzHeight/2);
 
-				fout << "PTZ:" << endl;
-				fout << "\tcenter (" << ptzCenter.x << ", " << ptzCenter.y << ")" << endl;
-				fout << "\tdiff in pixels (" << dx << ", " << dy << ")" << endl;
+				if( frameCnt%20 == 0 ) {
+					fout << "PTZ:" << endl;
+					fout << "\tcenter (" << ptzCenter.x << ", " << ptzCenter.y << ")" << endl;
+					fout << "\tdiff in pixels (" << dx << ", " << dy << ")" << endl;
+				}
 
 				dx = dx*(ptzSensorWidth/ptzWidth);
 				dy = dy*(ptzSensorHeight/ptzHeight);
@@ -265,11 +269,12 @@ int main( int argc, char *argv[] )
 
 				// if( frameCnt == 20 )
 					// ptzMotion.move( alpha, beta );
-
-				fout << "\tdiff in degrees (" << alpha << ", " << beta << ")" << endl;
-				fout << "\tradius in pixels " << radius << endl;
 				ptzDis = ptzFL*circleRadius/(radius*(ptzSensorHeight/ptzHeight));
-				fout << "\tdistance to center " << ptzDis << endl;
+
+				if( frameCnt%20 == 0 ) {
+					fout << "\tdiff in degrees (" << alpha << ", " << beta << ")" << endl;
+					fout << "\tradius in pixels " << radius << endl;
+					fout << "\tdistance to center " << ptzDis << endl;
 
 				/*
 				fout << "//////////////////////////////////////////////////////////////" << endl;
@@ -279,14 +284,19 @@ int main( int argc, char *argv[] )
 				fout << "base line = " << baseline << endl;
 				*/
 		
-				fout << endl << endl;
+					fout << endl << endl;
+				}
 
 				circle( ptzFrame, ptzCenter, 3, Scalar(0,255,0), -1, 8, 0 );
-				circle( ptzFrame, Point(ptzWidth/2,ptzHeight/2), 3, Scalar(0,0,255), -1, 8, 0 );
-				sprintf( buf, "ptz.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
-				imwrite( "imgs/"+string(buf), ptzFrame );
+				line( ptzFrame, Point(ptzWidth/2-10,ptzHeight/2), Point(ptzWidth/2+10,ptzHeight/2), Scalar(0,0,255), 3, 8, 0);
+				line( ptzFrame, Point(ptzWidth/2,ptzHeight/2-10), Point(ptzWidth/2,ptzHeight/2+10), Scalar(0,0,255), 3, 8, 0);
+
+				if( frameCnt%20 == 0 ) {
+					sprintf( buf, "ptz.%s.%d.jpg", outputDataName.c_str(), frameCnt/20 );
+					imwrite( "imgs/"+string(buf), ptzFrame );
+				}
 			}
-		}
+		// }
 
 		resize( ptzFrame, tmpFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
 		imshow( ptzWindow, tmpFrame );
