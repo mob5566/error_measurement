@@ -173,6 +173,8 @@ int main( int argc, char *argv[] )
 		pnrmFrame = Mat( Size(pnrmWidth,pnrmHeight), CV_8UC3, imgBuffer ).clone();
 
 		flip( pnrmFrame, pnrmFrame, 1 );
+
+		/*
 		// using HoughCircle to find the circle at panorama video
 		split( pnrmFrame, spl );
 		subtract( spl[2], spl[1], tmpFrame );
@@ -237,10 +239,12 @@ int main( int argc, char *argv[] )
 				imwrite( "imgs/"+string(buf), pnrmFrame );
 			}
 		}
+		*/
 
 		resize(pnrmFrame, tmpFrame, Size(pnrmFrame.cols/2,pnrmFrame.rows/2));
 		imshow( "Track Circle", tmpFrame );
 
+		/*
 		// using HoughCircle to find the circle at ptz video
 		// cvtColor( ptzFrame, tmpFrame, CV_BGR2GRAY );
 		spl.clear();
@@ -287,10 +291,10 @@ int main( int argc, char *argv[] )
 			fout << "theta = " << theta << endl;
 			baseline = sqrt(pnrmDis*pnrmDis+ptzDis*ptzDis-2*pnrmDis*ptzDis*cos(theta*PI/180));
 			fout << "base line = " << baseline << endl;
-			*/
 	
 				fout << endl << endl;
 			}
+
 
 			circle( ptzFrame, ptzCenter, 3, Scalar(0,255,0), -1, 8, 0 );
 			line( ptzFrame, Point(ptzWidth/2-10,ptzHeight/2), Point(ptzWidth/2+10,ptzHeight/2), Scalar(0,0,255), 3, 8, 0);
@@ -301,6 +305,7 @@ int main( int argc, char *argv[] )
 					imwrite( "imgs/"+string(buf), ptzFrame );
 			}
 		}
+		*/
 
 		resize( ptzFrame, tmpFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
 		imshow( ptzWindow, tmpFrame );
