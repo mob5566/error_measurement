@@ -57,6 +57,7 @@ int main( int argc, char *argv[] )
 	double ptzSensorWidth = 5.12;							// the width of ptz sensor in millimeters
 	double ptzSensorHeight = 2.88;							// the height of ptz sensor in millimeters
 	bool errorCorrection = true;							// if errorCorrection is true, the error correction is turn on
+	VideoWriter outputVideo( "out.avi", -1, 1, Size(1920,1080), true );
 
 	// parameters for calibration
 	double circleRadius = 190.5/2;							// the real radius of circle in millimeters
@@ -144,6 +145,7 @@ int main( int argc, char *argv[] )
 	// Processing
 	//
 	Mat ptzFrame, pnrmFrame;
+	Mat oriPtz, oriPnrm;
 	Mat tmpFrame;
 	unsigned char *imgBuffer;
 	imgBuffer = (unsigned char *) malloc( pnrmWidth*pnrmHeight*3*sizeof(unsigned char) );
@@ -164,6 +166,7 @@ int main( int argc, char *argv[] )
 	Rect rect;
 	RNG rng(12345);
 	double maxContourArea;
+	bool findTeacher;
 	// int maxContour;
 
 	namedWindow( "Tracking" );
@@ -178,6 +181,7 @@ int main( int argc, char *argv[] )
 
 		// get ptz frame
 		ptzFrame = Mat(*context->image).clone();
+		ptzFrame.copyTo(oriPtz);
 
 		// get panorama frame
 		if( CaptureStillImageToFile(imgBuffer)!=S_OK ) {
@@ -187,13 +191,17 @@ int main( int argc, char *argv[] )
 		pnrmFrame = Mat( Size(pnrmWidth,pnrmHeight), CV_8UC3, imgBuffer ).clone();
 
 		flip( pnrmFrame, pnrmFrame, 1 );
+		pnrmFrame.copyTo(oriPnrm);
+		resize( oriPnrm, oriPnrm, Size(1920,1080) );
 
+		resize( pnrmFrame, tmp, Size(pnrmFrame.cols/8, pnrmFrame.rows/8) );
         //update the background model
 		pMOG2( pnrmFrame, fgMaskMOG2 );
 
         //show the current frame and the fg masks
 
-		tmp = fgMaskMOG2.clone();
+		resize( fgMaskMOG2, tmp, Size(pnrmWidth, pnrmHeight) );
+		// tmp = fgMaskMOG2.clone();
 		threshold( tmp, tmp, 200, 255, THRESH_BINARY );
 		// medianBlur( tmp, tmp, 3 );		// the calculation of median filter is huge, so the frame per second is low when we used this
 		GaussianBlur( tmp, tmp, Size(5,5), 0, 0 );
@@ -210,6 +218,7 @@ int main( int argc, char *argv[] )
 		/// Find contours
 		contourInput = tmp.clone();
 		findContours( contourInput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+		findTeacher = false;
 
 		/// Draw contours
 		Mat drawing = Mat::zeros( contourInput.size(), CV_8UC3 );
@@ -229,16 +238,16 @@ int main( int argc, char *argv[] )
 			if( dx*1.3 > dy ) continue;
 			if( dx*4.0 < dy ) continue;
 			if( maxContourArea < contourArea(contours[i]) ) {
+				findTeacher = true;
 				rectangle( frameOut, rect.tl(), rect.br(), Scalar(0,255,0), 10, 8, 0 );
 				pnrmCenter = (rect.tl()+Point(rect.width/2,rect.height/2));
 				maxContourArea = contourArea(contours[i]);
 			}
 		}
-
-		++frameCnt;
 	
 		// Show in a window
 		int shrinkFactor = 4;
+		/*
 		resize( drawing, drawing, Size(drawing.cols/shrinkFactor,drawing.rows/shrinkFactor) );
 		namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
 		imshow( "Contours", drawing );
@@ -248,6 +257,7 @@ int main( int argc, char *argv[] )
 		resize( frameOut, frameOut, Size(frameOut.cols/shrinkFactor,frameOut.rows/shrinkFactor) );
 		namedWindow( "Frame" );
         imshow("Frame", frameOut );
+		*/
 
 		// assume that we will get only one circle
 		// pnrmCenter = Point();
@@ -290,6 +300,11 @@ int main( int argc, char *argv[] )
 
 		resize( ptzFrame, tmpFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
 		imshow( ptzWindow, tmpFrame );
+
+		if( findTeacher ) 
+			outputVideo << oriPtz;
+		else
+			outputVideo << oriPnrm;
 
 		char key = waitKey(10);
 
