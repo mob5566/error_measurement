@@ -42,7 +42,7 @@ int main( int argc, char *argv[] )
 	// Initialization parameters
 	//
 	char *ptzUrl = "rtsp://192.168.100.150:8557/h264";		// the location of the ptz stream
-	char *ptzWindow = "Tracking Camera";					// the window name of ptz
+	char *ptzWindow = "Pan-Tilt-Zoom Camera";					// the window name of ptz
 	char *pnrmWindow = "Panorama Camera";					// the window name of panorama
 	int pnrmResolutionIndex = 0;							// the default panorama's resolution is set to 7 (2048*1536)
 	int ptzWidth = 1920;									// the width of ptz video
@@ -150,7 +150,7 @@ int main( int argc, char *argv[] )
 	unsigned char *imgBuffer;
 	imgBuffer = (unsigned char *) malloc( pnrmWidth*pnrmHeight*3*sizeof(unsigned char) );
 	Point2d trackCenter = Point();
-	Point pnrmCenter, ptzCenter;
+	Point pnrmCenter = Point(pnrmWidth/2, pnrmHeight/2), ptzCenter;
 	int radius;
 	double dx, dy, alpha, beta;
 	char buf[1024];
@@ -166,7 +166,9 @@ int main( int argc, char *argv[] )
 	Rect rect;
 	RNG rng(12345);
 	double maxContourArea;
+	int bgShrink = 8;
 	bool findTeacher;
+	bool hugeChange;
 	// int maxContour;
 
 	namedWindow( "Tracking" );
@@ -194,17 +196,17 @@ int main( int argc, char *argv[] )
 		pnrmFrame.copyTo(oriPnrm);
 		resize( oriPnrm, oriPnrm, Size(1920,1080) );
 
-		resize( pnrmFrame, tmp, Size(pnrmFrame.cols/8, pnrmFrame.rows/8) );
+		resize( pnrmFrame, tmp, Size(pnrmFrame.cols/bgShrink, pnrmFrame.rows/bgShrink) );
         //update the background model
-		pMOG2( pnrmFrame, fgMaskMOG2 );
+		pMOG2( tmp, fgMaskMOG2 );
 
+		fgMaskMOG2.copyTo(tmp);
         //show the current frame and the fg masks
 
-		resize( fgMaskMOG2, tmp, Size(pnrmWidth, pnrmHeight) );
 		// tmp = fgMaskMOG2.clone();
 		threshold( tmp, tmp, 200, 255, THRESH_BINARY );
 		// medianBlur( tmp, tmp, 3 );		// the calculation of median filter is huge, so the frame per second is low when we used this
-		GaussianBlur( tmp, tmp, Size(5,5), 0, 0 );
+		GaussianBlur( tmp, tmp, Size(3,3), 0, 0 );
 		// blur( tmp, tmp, Size(9,9) );
 		// Canny( tmp, tmp, 50, 150 );
 
@@ -219,19 +221,27 @@ int main( int argc, char *argv[] )
 		contourInput = tmp.clone();
 		findContours( contourInput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
 		findTeacher = false;
+		hugeChange = false;
 
 		/// Draw contours
 		Mat drawing = Mat::zeros( contourInput.size(), CV_8UC3 );
 		maxContourArea = 0;
 		for( size_t i=0; i<contours.size(); i++ )
 		{
-			if( contourArea( contours[i] ) < 5000.0 ) continue;
+			if( contourArea( contours[i] ) < 200.0 ) {
+				continue;
+			}
+			if( contourArea( contours[i] ) > 2000.0 ) {
+				hugeChange = true;
+				continue;
+			}
 			convexHull( contours[i], contours[i] );
 		
 			Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-			drawContours( drawing, contours, i, color, 10, 8, hierarchy, 0, Point() );
+			drawContours( drawing, contours, i, color, 3, 8, hierarchy, 0, Point() );
 			
 			rect = boundingRect( Mat(contours[i]) );
+			rect = Rect( rect.tl()*bgShrink, rect.br()*bgShrink );
 			double dx = rect.width;
 			double dy = rect.height;
 			
@@ -247,17 +257,17 @@ int main( int argc, char *argv[] )
 	
 		// Show in a window
 		int shrinkFactor = 4;
-		/*
-		resize( drawing, drawing, Size(drawing.cols/shrinkFactor,drawing.rows/shrinkFactor) );
+		
+		resize( drawing, drawing, Size(drawing.cols*2,drawing.rows*2) );
 		namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
 		imshow( "Contours", drawing );
-		resize( tmp, tmp, Size(tmp.cols/shrinkFactor,tmp.rows/shrinkFactor) );
+		resize( tmp, tmp, Size(tmp.cols*2,tmp.rows*2) );
 		namedWindow( "FG Mask MOG 2" );
         imshow("FG Mask MOG 2", tmp);
 		resize( frameOut, frameOut, Size(frameOut.cols/shrinkFactor,frameOut.rows/shrinkFactor) );
 		namedWindow( "Frame" );
         imshow("Frame", frameOut );
-		*/
+		
 
 		// assume that we will get only one circle
 		// pnrmCenter = Point();
@@ -301,10 +311,13 @@ int main( int argc, char *argv[] )
 		resize( ptzFrame, tmpFrame, Size(ptzFrame.cols/4, ptzFrame.rows/4) );
 		imshow( ptzWindow, tmpFrame );
 
-		if( findTeacher ) 
+		if( findTeacher && !hugeChange ) {
 			outputVideo << oriPtz;
-		else
+			cout << "PTZ" << endl;
+		} else {
 			outputVideo << oriPnrm;
+			cout << "Panorama" << endl;
+		}
 
 		char key = waitKey(10);
 
